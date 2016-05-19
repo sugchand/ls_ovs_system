@@ -15,9 +15,8 @@ class SYS_OP(Enum):
     GET_INSTALL_DIR             = 8
     GET_OVS_LOGS                = 9
     GET_CPU_INFO                = 10
-    GET_OVS_DIR                 = 11
-    GET_DPDK_DIR                = 12
-    GET_QEMU_DIR                = 13
+
+    LIST_DIR                    = 11
 
 class linux_system:
     # The directory sets that must be set to collect all the information.
@@ -26,13 +25,17 @@ class linux_system:
                     SYS_OP.GET_OVS_VERSION : "ovs-vswitchd --version",
                     SYS_OP.GET_DPDK_VERSION : None,
                     SYS_OP.GET_HUGEPAGE_INFO : "cat /proc/meminfo |grep Huge",
-                    SYS_OP.GET_LINUX_DISTRO : "lsb_release -a"
+                    SYS_OP.GET_LINUX_DISTRO : "lsb_release -a",
+                    SYS_OP.LIST_DIR : "ls -la"
                     }
     FILE_NAME = "/tmp/ovs-logs.log"
     fp = None
 
-    def __init__(self):
+    def __init__(self, ovs_install_dir, dpdk_install_dir, qemu_install_dir):
         self.fp = open(self.FILE_NAME, "w")
+        self.OVS_INSTALL_DIR = ovs_install_dir
+        self.DPDK_INSTALL_DIR = dpdk_install_dir
+        self.qemu_INSTALL_DIR = qemu_install_dir
 
     def __del__(self):
         self.fp.close()
@@ -65,6 +68,26 @@ class linux_system:
         (res, err) = self.run_command(cmd, cmd_dir)
         return (cmd, res, err)
 
+    def get_ovs_run_sock_dir(self):
+        log_file = None
+        run_dir = None
+        if os.path.isfile("/usr/local/var/log/openvswitch/ovs-vswitchd.log"):
+            log_file = "/usr/local/var/log/openvswitch/ovs-vswitchd.log"
+            run_dir = "/usr/local/var/run/openvswitch/"
+        elif os.path.isfile("/var/log/openvswitch/ovs-vswitchd.log"):
+            log_file = "/var/log/openvswitch/ovs-vswitchd.log"
+            run_dir = "//var/run/openvswitch/"
+        return(log_file, run_dir)
+
+    def get_ovs_config_stats(self):
+        exec_cmd_dir = ' '
+        ovs_res = '\n'
+        if self.OVS_INSTALL_DIR != "":
+            exec_cmd_dir = os.path.join(exec_cmd_dir, "utilities")
+        (res, err) = self.run_command("ovs-vsctl show", cmd_cwd=exec_cmd_dir)
+        ovs_res = ovs_res + "ovs-vsctl show\n" + res
+        self.write_to_log(None, ovs_res, None)
+
     def write_to_log(self, exec_cmd, res, err):
         if exec_cmd == None:
             exec_cmd = "None"
@@ -77,6 +100,7 @@ class linux_system:
         self.fp.write("cmd err code :- " + err + "\n")
         self.fp.write(res)
         self.fp.write("\n#######################################################\n")
+
 
 class windows_system:
     FILE_NAME = "C:/temp/ovs-logs.log"
@@ -95,6 +119,12 @@ class windows_system:
         pass
 
     def write_to_log(self, exec_cmd, res, err):
+        pass
+
+    def get_ovs_run_dir(self):
+        pass
+
+    def get_ovs_config_stats(self):
         pass
 
 def get_kernel_version(sys_obj):
@@ -124,37 +154,46 @@ def get_hugepage_info(sys_obj):
 def get_install_dir():
     pass
 
-def get_ovs_logs():
-    pass
+def get_ovs_logs(sys_obj):
+    (log_file, sock_dir) = sys_obj.get_ovs_run_sock_dir()
+    if log_file == None or sock_dir == None:
+        sys_obj.write_to_log("", "Cannot get ovs logs", "Files are missing")
+        return
+    with open(log_file) as log_fp:
+        sys_obj.write_to_log(log_fp.read_lines(), None, None)
+    (cmd, res, err) = sys_obj.get_sys_info(SYS_OP.LIST_DIR, cmd_dir = sock_dir)
+    sys_obj.write_to_log(cmd, res, err)
+    sys_obj.get_ovs_config_stats()
 
 def get_cpu_info():
     # get Host CPU and cores that used by OVS and qemu.
     pass
 
 def main():
-    OVS_INSTALL_DIR = None
-    DPDK_INSTALL_DIR = None
-    QEMU_INSTALL_DIR = None
+    OVS_INSTALL_DIR = ""
+    DPDK_INSTALL_DIR = ""
+    QEMU_INSTALL_DIR = ""
     sys_obj = None
     if os.name == 'posix':
         #Linux based system.
-        OVS_INSTALL_DIR = "/usr/src/openvswitch"
-        DPDK_INSTALL_DIR = "/usr/src/dpdk"
-        QEMU_INSTALL_DIR = "usr/src/qemu"
-        data = raw_input("Enter OVS install dir(" + OVS_INSTALL_DIR + "):")
+        OVS_INSTALL_DIR = None
+        DPDK_INSTALL_DIR = None
+        QEMU_INSTALL_DIR = None
+        data = raw_input("Enter OVS source directory(Enter to skip):")
         if data:
             OVS_INSTALL_DIR = data.strip()
-        data = raw_input("Enter DPDK install dir(" + DPDK_INSTALL_DIR + "):")
+        data = raw_input("Enter DPDK source directory(Enter to skip):")
         if data:
             DPDK_INSTALL_DIR = data.strip()
-        data = raw_input("Enter QEMU install dir(" + QEMU_INSTALL_DIR + "):")
+        data = raw_input("Enter QEMU source dir(Enter to skip)")
         if data:
-            DPDK_INSTALL_DIR = data.strip()    
-        sys_obj = linux_system()
+            DPDK_INSTALL_DIR = data.strip()
+        sys_obj = linux_system(OVS_INSTALL_DIR, DPDK_INSTALL_DIR,
+                               QEMU_INSTALL_DIR)
         get_linux_distro(sys_obj)
         get_kernel_version(sys_obj)
         get_hugepage_info(sys_obj)
-        
+        get_ovs_logs(sys_obj)
     else:
         print("The tool doesnt support this OS, Exiting...")
         return
