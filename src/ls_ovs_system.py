@@ -6,7 +6,6 @@ import os
 @unique
 class SYS_OP(Enum):
     GET_KERNEL_VERSION          = 1
-    GET_OVS_VERSION             = 2
     GET_DPDK_VERSION            = 3
     GET_QEMU_VERSION            = 4
     GET_LINUX_DISTRO            = 5
@@ -20,9 +19,8 @@ class SYS_OP(Enum):
 
 class linux_system:
     # The directory sets that must be set to collect all the information.
-    CMD_SET_DICT = { 
+    CMD_SET_DICT = {
                     SYS_OP.GET_KERNEL_VERSION : "uname -a",
-                    SYS_OP.GET_OVS_VERSION : "ovs-vswitchd --version",
                     SYS_OP.GET_DPDK_VERSION : None,
                     SYS_OP.GET_HUGEPAGE_INFO : "cat /proc/meminfo |grep Huge",
                     SYS_OP.GET_LINUX_DISTRO : "lsb_release -a",
@@ -42,6 +40,8 @@ class linux_system:
 
     def run_command(self, cmd, cmd_cwd = None, *args):
         exec_cmd = []
+        if getpass.getuser() != "root":
+            cmd = "sudo " + cmd
         exec_cmd.append(cmd)
 
         if(len(args)):
@@ -63,8 +63,6 @@ class linux_system:
 
     def get_sys_info(self, cmd_opt, cmd_dir = None):
         cmd = self.CMD_SET_DICT[cmd_opt]
-        if getpass.getuser() != "root":
-            cmd = "sudo " + cmd
         (res, err) = self.run_command(cmd, cmd_dir)
         return (cmd, res, err)
 
@@ -80,15 +78,43 @@ class linux_system:
         return(log_file, run_dir)
 
     def get_ovs_config_stats(self):
-        exec_cmd_dir = ' '
+        exec_cmd_dir = None
         ovs_res = '\n'
+        self.write_cmd_to_log(None, None, None, msg = "OVS config & stats :- ")
         if self.OVS_INSTALL_DIR != "":
-            exec_cmd_dir = os.path.join(exec_cmd_dir, "utilities")
-        (res, err) = self.run_command("ovs-vsctl show", cmd_cwd=exec_cmd_dir)
-        ovs_res = ovs_res + "ovs-vsctl show\n" + res
-        self.write_to_log(None, ovs_res, None)
+            exec_cmd_dir = os.path.join(self.OVS_INSTALL_DIR, "utilities")
+        (res, err) = self.run_command("./ovs-vsctl --version",
+                                      cmd_cwd=exec_cmd_dir)
+        ovs_res = ovs_res + "ovs-vsctl --version\n" + res + "\n\n"
+        (res, err) = self.run_command("./ovs-vsctl show", cmd_cwd=exec_cmd_dir)
+        ovs_res = ovs_res + "ovs-vsctl show\n" + res + "\n\n"
+        (res, err) = self.run_command("./ovs-appctl dpctl/show -s",
+                                      cmd_cwd=exec_cmd_dir)
+        ovs_res = ovs_res + "ovs-appctl dpctl/show -s\n" + res + "\n\n"
+        (res, err) = self.run_command(
+                     "./ovs-appctl dpctl/dump-flows netdev@ovs-netdev",
+                     cmd_cwd=exec_cmd_dir)
+        ovs_res = ovs_res + "ovs-appctl dpctl/dump-flows" + res + "\n\n"
+        (res, err) = self.run_command("./ovs-vsctl list-br",
+                                      cmd_cwd=exec_cmd_dir)
+        ovs_res = ovs_res + "ovs-vsctl list-br" + "\n" + res + "\n\n"
+        if not err:
+            br_list = filter(None, res.split('\n'))
+        else:
+           br_list = []
+        for br in br_list:
+            (res, err) = self.run_command("./ovs-ofctl show " + br,
+                                          cmd_cwd=exec_cmd_dir)
+            ovs_res = ovs_res + "ovs-ofctl show " + br + "\n" + res + "\n\n"
+            (res, err) = self.run_command("./ovs-ofctl dump-flows " + br,
+                                          cmd_cwd=exec_cmd_dir)
+            ovs_res = ovs_res + "ovs-ofctl dump-flows " + br + "\n" + res + "\n\n"
+        self.write_to_log(ovs_res)
 
-    def write_to_log(self, exec_cmd, res, err):
+    def write_to_log(self, str):
+        self.fp.write(str)
+
+    def write_cmd_to_log(self, exec_cmd, res, err, msg=""):
         if exec_cmd == None:
             exec_cmd = "None"
         if res == None:
@@ -96,7 +122,8 @@ class linux_system:
         if err == None:
             err = "None"
         self.fp.write("#######################################################\n")
-        self.fp.write("cmd :- " + exec_cmd + "\n")
+        self.fp.write(msg)
+        self.fp.write("\ncmd :- " + exec_cmd + "\n")
         self.fp.write("cmd err code :- " + err + "\n")
         self.fp.write(res)
         self.fp.write("\n#######################################################\n")
@@ -118,7 +145,7 @@ class windows_system:
     def get_sys_info(self, cmd_opt,cmd_dir = None):
         pass
 
-    def write_to_log(self, exec_cmd, res, err):
+    def write_cmd_to_log(self, exec_cmd, res, err):
         pass
 
     def get_ovs_run_dir(self):
@@ -129,7 +156,7 @@ class windows_system:
 
 def get_kernel_version(sys_obj):
     (cmd, res, err) = sys_obj.get_sys_info(SYS_OP.GET_KERNEL_VERSION)
-    sys_obj.write_to_log(cmd, res, err)
+    sys_obj.write_cmd_to_log(cmd, res, err)
 
 def get_ovs_version():
     pass
@@ -142,14 +169,14 @@ def get_qemu_version():
 
 def get_linux_distro(sys_obj):
     (cmd, res, err) = sys_obj.get_sys_info(SYS_OP.GET_LINUX_DISTRO)
-    sys_obj.write_to_log(cmd, res, err)
+    sys_obj.write_cmd_to_log(cmd, res, err)
 
 def get_dpdk_port_info():
     pass
 
 def get_hugepage_info(sys_obj):
     (cmd, res, err) = sys_obj.get_sys_info(SYS_OP.GET_HUGEPAGE_INFO)
-    sys_obj.write_to_log(cmd, res, err)
+    sys_obj.write_cmd_to_log(cmd, res, err)
 
 def get_install_dir():
     pass
@@ -157,12 +184,13 @@ def get_install_dir():
 def get_ovs_logs(sys_obj):
     (log_file, sock_dir) = sys_obj.get_ovs_run_sock_dir()
     if log_file == None or sock_dir == None:
-        sys_obj.write_to_log("", "Cannot get ovs logs", "Files are missing")
+        sys_obj.write_cmd_to_log("", "Cannot get ovs logs", "Files are missing")
         return
     with open(log_file) as log_fp:
-        sys_obj.write_to_log(log_fp.read_lines(), None, None)
+        for line in log_fp:
+            sys_obj.write_to_log(line)
     (cmd, res, err) = sys_obj.get_sys_info(SYS_OP.LIST_DIR, cmd_dir = sock_dir)
-    sys_obj.write_to_log(cmd, res, err)
+    sys_obj.write_cmd_to_log(cmd, res, err, msg = "OVS socket directory:- ")
     sys_obj.get_ovs_config_stats()
 
 def get_cpu_info():
