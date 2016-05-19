@@ -74,7 +74,7 @@ class linux_system:
             run_dir = "/usr/local/var/run/openvswitch/"
         elif os.path.isfile("/var/log/openvswitch/ovs-vswitchd.log"):
             log_file = "/var/log/openvswitch/ovs-vswitchd.log"
-            run_dir = "//var/run/openvswitch/"
+            run_dir = "/var/run/openvswitch/"
         return(log_file, run_dir)
 
     def get_ovs_config_stats(self):
@@ -187,6 +187,7 @@ def get_ovs_logs(sys_obj):
         sys_obj.write_cmd_to_log("", "Cannot get ovs logs", "Files are missing")
         return
     with open(log_file) as log_fp:
+        sys_obj.write_cmd_to_log(None, None, None, msg = "OVS logs :- ")
         for line in log_fp:
             sys_obj.write_to_log(line)
     (cmd, res, err) = sys_obj.get_sys_info(SYS_OP.LIST_DIR, cmd_dir = sock_dir)
