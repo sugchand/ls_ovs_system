@@ -8,7 +8,7 @@ class SYS_OP(Enum):
     GET_KERNEL_VERSION          = 1
     GET_DPDK_VERSION            = 3
     GET_QEMU_VERSION            = 4
-    GET_LINUX_DISTRO            = 5
+    GET_DISTRO_VERSION          = 5
     GET_DPDK_PORT_INFO          = 6
     GET_HUGEPAGE_INFO           = 7
     GET_INSTALL_DIR             = 8
@@ -23,7 +23,7 @@ class linux_system:
                     SYS_OP.GET_KERNEL_VERSION : "uname -a",
                     SYS_OP.GET_DPDK_VERSION : None,
                     SYS_OP.GET_HUGEPAGE_INFO : "cat /proc/meminfo |grep Huge",
-                    SYS_OP.GET_LINUX_DISTRO : "lsb_release -a",
+                    SYS_OP.GET_DISTRO_VERSION : "lsb_release -a",
                     SYS_OP.LIST_DIR : "ls -la"
                     }
     FILE_NAME = "/tmp/ovs-logs.log"
@@ -128,6 +128,9 @@ class linux_system:
         self.fp.write(res)
         self.fp.write("\n#######################################################\n")
 
+    def get_ovs_hw_info(self):
+        # Collect cpu core mask of OVS and QEMU
+        pass
 
 class windows_system:
     FILE_NAME = "C:/temp/ovs-logs.log"
@@ -154,6 +157,9 @@ class windows_system:
     def get_ovs_config_stats(self):
         pass
 
+    def get_ovs_hw_info(self):
+        pass
+
 def get_kernel_version(sys_obj):
     (cmd, res, err) = sys_obj.get_sys_info(SYS_OP.GET_KERNEL_VERSION)
     sys_obj.write_cmd_to_log(cmd, res, err)
@@ -167,8 +173,8 @@ def get_dpdk_version():
 def get_qemu_version():
     pass
 
-def get_linux_distro(sys_obj):
-    (cmd, res, err) = sys_obj.get_sys_info(SYS_OP.GET_LINUX_DISTRO)
+def get_distro_version(sys_obj):
+    (cmd, res, err) = sys_obj.get_sys_info(SYS_OP.GET_DISTRO_VERSION)
     sys_obj.write_cmd_to_log(cmd, res, err)
 
 def get_dpdk_port_info():
@@ -194,7 +200,7 @@ def get_ovs_logs(sys_obj):
     sys_obj.write_cmd_to_log(cmd, res, err, msg = "OVS socket directory:- ")
     sys_obj.get_ovs_config_stats()
 
-def get_cpu_info():
+def get_cpu_info(sys_obj):
     # get Host CPU and cores that used by OVS and qemu.
     pass
 
@@ -219,7 +225,7 @@ def main():
             DPDK_INSTALL_DIR = data.strip()
         sys_obj = linux_system(OVS_INSTALL_DIR, DPDK_INSTALL_DIR,
                                QEMU_INSTALL_DIR)
-        get_linux_distro(sys_obj)
+        get_distro_version(sys_obj)
         get_kernel_version(sys_obj)
         get_hugepage_info(sys_obj)
         get_ovs_logs(sys_obj)
